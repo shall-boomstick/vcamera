@@ -1,50 +1,63 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report:
+Version change: N/A → 1.0.0 (initial constitution)
+Modified principles: N/A (new constitution)
+Added sections: Core Principles, Development Environment, Governance
+Removed sections: N/A
+Templates requiring updates:
+  ✅ .specify/templates/plan-template.md - Constitution Check section aligns with KISS principle
+  ✅ .specify/templates/spec-template.md - No changes needed, already flexible
+  ✅ .specify/templates/tasks-template.md - No changes needed, already supports simple workflows
+Follow-up TODOs: None
+-->
+
+# vcamera Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. KISS (Keep It Simple, Stupid) - PRIMARY PRINCIPLE
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+Simplicity is the highest priority. Every design decision MUST favor the simplest solution that works. Avoid over-engineering, premature optimization, and unnecessary abstractions. If a feature doesn't directly solve the problem at hand, it doesn't belong. The goal is a working application, not enterprise-grade architecture.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+**Rationale**: This project prioritizes functionality over formality. Complex solutions introduce maintenance burden and slow development. Simple code is easier to understand, debug, and modify.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### II. Python Web Application
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+The application MUST be built in Python with a web-based user interface. Choose the simplest web framework that meets the requirements. Prefer widely-adopted libraries with minimal dependencies. The web interface should be functional and intuitive, not necessarily polished or feature-rich.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+**Rationale**: Python provides rapid development and a rich ecosystem. A web interface makes the application accessible across all platforms without requiring platform-specific GUI dependencies. This improves cross-platform compatibility and accessibility.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### III. Virtual Environment Isolation
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+ALL dependencies and the application runtime MUST operate within a Python virtual environment (VENV). No system-wide Python packages should be required. The VENV setup MUST be documented and reproducible.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+**Rationale**: VENV isolation prevents dependency conflicts, ensures consistent environments across different machines, and simplifies deployment. This is a minimal requirement for maintainability.
+
+## Development Environment
+
+### Virtual Environment Setup
+
+- Create VENV: `python3 -m venv venv`
+- Activate VENV: `source venv/bin/activate` (Linux/Mac) or `venv\Scripts\activate` (Windows)
+- Install dependencies: `pip install -r requirements.txt`
+- All development and execution MUST occur within the activated VENV
+
+### Dependency Management
+
+- Use `requirements.txt` for dependency tracking
+- Keep dependencies minimal - only include what is necessary
+- Document any non-standard setup steps in project README
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution supersedes all other development practices. When in doubt, choose the simpler option.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Amendment Procedure**: Update this document with version bump (MAJOR.MINOR.PATCH):
+
+- MAJOR: Backward incompatible principle changes
+- MINOR: New principles or significant additions
+- PATCH: Clarifications and wording improvements
+
+**Compliance**: All implementation plans and feature specifications MUST verify alignment with these principles, especially KISS. If complexity is necessary, it MUST be justified in the plan's Complexity Tracking section.
+
+**Version**: 1.0.0 | **Ratified**: 2025-12-22 | **Last Amended**: 2025-12-22

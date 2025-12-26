@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Virtual Camera Server{% endblock %}
+
+{% block extra_head %}
+<style>
+    .dashboard-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .tabs {
+        display: flex;
+        border-bottom: 2px solid #ddd;
+        margin-bottom: 20px;
+    }
+    .tab {
+        padding: 10px 20px;
+        cursor: pointer;
+        border: none;
+        background: none;
+        border-bottom: 2px solid transparent;
+    }
+    .tab.active {
+        border-bottom-color: #007bff;
+        color: #007bff;
+    }
+    .tab-content {
+        display: none;
+    }
+    .tab-content.active {
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <div class="dashboard-header">
+        <h1>Virtual Camera Server</h1>
+        <div>
+            <span>Logged in as: <strong>{{ session.username }}</strong></span>
+            <a href="{{ url_for('auth.logout') }}" class="btn btn-secondary">Logout</a>
+        </div>
+    </div>
+    
+    <div class="tabs">
+        <button class="tab active" onclick="showTab('videos')">Video Library</button>
+        <button class="tab" onclick="showTab('cameras')">Virtual Cameras</button>
+    </div>
+    
+    <!-- Video Library Tab -->
+    <div id="videos-tab" class="tab-content active">
+        <h2>Video Library</h2>
+        
+        <div class="upload-section">
+            <h3>Upload Video</h3>
+            <form id="upload-form" enctype="multipart/form-data">
+                <input type="file" id="video-file" name="file" accept="video/*" required>
+                <button type="submit" class="btn btn-primary">Upload</button>
+            </form>
+            <div id="upload-status"></div>
+        </div>
+        
+        <div class="video-list">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3>Uploaded Videos</h3>
+                <button onclick="scanVideos()" class="btn btn-secondary btn-sm">Scan for Missing Videos</button>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Filename</th>
+                        <th>Duration (s)</th>
+                        <th>Size (MB)</th>
+                        <th>Format</th>
+                        <th>Dimensions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for video in videos %}
+                    <tr>
+                        <td>{{ video.filename }}</td>
+                        <td>{{ "%.1f"|format(video.duration) }}</td>
+                        <td>{{ "%.2f"|format(video.file_size / (1024*1024)) }}</td>
+                        <td>{{ video.format }}</td>
+                        <td>{{ video.width }}x{{ video.height }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Cameras Tab -->
+    <div id="cameras-tab" class="tab-content">
+        <h2>Virtual Cameras</h2>
+        
+        <div class="camera-list">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Videos</th>
+                        <th>RTSP URL</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for camera in cameras %}
+                    <tr data-camera-id="{{ camera.id }}">
+                        <td>{{ camera.name }}</td>
+                        <td><span class="status status-{{ camera.status }}">{{ camera.status }}</span></td>
+                        <td>{{ camera.video_ids|length }}</td>
+                        <td><code>{{ camera.rtsp_url }}</code></td>
+                        <td>
+                            {% if camera.status == 'active' %}
+                            <button onclick="stopCamera('{{ camera.id }}')" class="btn btn-danger btn-sm">Stop</button>
+                            {% else %}
+                            <button onclick="startCamera('{{ camera.id }}')" class="btn btn-success btn-sm">Start</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="create-camera-section">
+            <h3>Create New Camera</h3>
+            <form id="create-camera-form">
+                <div class="form-group">
+                    <label for="camera-name">Camera Name:</label>
+                    <input type="text" id="camera-name" name="name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Select Videos:</label>
+                    <div class="video-checkboxes">
+                        {% for video in videos %}
+                        <label>
+                            <input type="checkbox" name="video_ids" value="{{ video.id }}">
+                            {{ video.filename }} ({{ "%.1f"|format(video.duration) }}s)
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="auth-enabled" name="auth_enabled">
+                        Enable RTSP Authentication
+                    </label>
+                </div>
+                
+                <div id="auth-fields" style="display: none;">
+                    <div class="form-group">
+                        <label for="auth-username">Username:</label>
+                        <input type="text" id="auth-username" name="auth_username">
+                    </div>
+                    <div class="form-group">
+                        <label for="auth-password">Password:</label>
+                        <input type="password" id="auth-password" name="auth_password">
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Create Camera</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function showTab(tabName) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById(tabName + '-tab').classList.add('active');
+}
+
+document.getElementById('auth-enabled').addEventListener('change', function() {
+    document.getElementById('auth-fields').style.display = this.checked ? 'block' : 'none';
+});
+</script>
+{% endblock %}
+

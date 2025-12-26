@@ -1,0 +1,15 @@
+# Python dependencies
+# NOTE: PyGObject requires system-level packages to be installed first!
+# On Ubuntu/Debian, run:
+#   sudo apt-get install python3-gi gir1.2-gstreamer-1.0 gir1.2-gst-rtsp-server-1.0
+# See README.md for full system dependency installation instructions.
+
+opencv-python>=4.8.0
+PyGObject>=3.42.0
+Flask>=3.0.0
+Werkzeug>=3.0.0
+
+# Testing dependencies
+pytest>=7.4.0
+pytest-cov>=4.1.0
+

@@ -31,7 +31,13 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+**KISS Principle**: Is this the simplest solution that works? Have unnecessary abstractions, patterns, or dependencies been avoided?
+
+**Python GUI**: Does the solution use Python with a GUI framework? Is the chosen framework the simplest option that meets requirements?
+
+**VENV Isolation**: Are all dependencies managed within a virtual environment? Is the setup documented and reproducible?
+
+**Complexity Justification**: If any complexity is introduced, it MUST be documented in the Complexity Tracking section below with rationale for why simpler alternatives were rejected.
 
 ## Project Structure
 

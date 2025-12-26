@@ -39,8 +39,17 @@ tests/
 source venv/bin/activate
 
 # Install test dependencies
-pip install pytest pytest-cov
+# Validate test health
+python3 tests/validate_tests.py
 
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=src --cov-report=html
+
+# Check test collection
+pytest --collect-only
 # Run all tests
 pytest
 

@@ -107,6 +107,33 @@ pytest tests/unit/test_models.py::TestVideo::test_video_creation
 - ✅ Web camera management (requires auth)
 - ✅ Dashboard access control
 
+### Phase 5: User Story 3 (Multiple Videos on Repeat)
+- ✅ VirtualCamera model with multiple video_ids support
+- ✅ CameraManagerService multi-video creation
+- ✅ Video sequential playback model support (current_video_index)
+- ✅ Multi-video camera integration tests
+- ✅ Update camera with multiple videos
+- ⚠️ RTSP streaming with multiple videos (requires GStreamer - not tested in unit/integration)
+
+### Phase 6: User Story 4 (RTSP Stream Viewer)
+- ✅ Viewer page access control
+- ✅ Viewer page with valid camera
+- ✅ Stream proxy endpoint authentication
+- ✅ Stream proxy error handling
+
+### Phase 7: User Story 5 (RTSP Authentication)
+- ✅ Camera creation with RTSP authentication
+- ✅ Auth credential validation
+- ✅ Update camera authentication settings
+- ✅ Password hashing verification
+
+### Phase 8: Polish & Edge Cases
+- ✅ Video deletion with camera dependencies
+- ✅ Video deletion when not in use
+- ✅ Camera deletion workflow
+- ✅ Empty video list validation
+- ✅ Camera lifecycle edge cases
+
 ## Test Categories
 
 ### Unit Tests

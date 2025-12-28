@@ -1,0 +1,421 @@
+{% extends "base.html" %}
+
+{% block title %}Stream Viewer - {{ camera.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .viewer-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    .viewer-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .stream-display {
+        position: relative;
+        background: #000;
+        border: 2px solid #ddd;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 20px;
+    }
+    .stream-display canvas {
+        width: 100%;
+        height: auto;
+        display: block;
+        max-height: 80vh;
+    }
+    .stream-display img {
+        width: 100%;
+        height: auto;
+        display: block;
+        max-height: 80vh;
+    }
+    .stream-info {
+        background: #f5f5f5;
+        padding: 15px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+    }
+    .stream-info h3 {
+        margin-top: 0;
+    }
+    .stream-info code {
+        background: #fff;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.9em;
+    }
+    .error-message {
+        background: #fee;
+        color: #c33;
+        padding: 15px;
+        border-radius: 4px;
+        margin: 20px 0;
+        display: none;
+    }
+    .error-message.show {
+        display: block;
+    }
+    .status-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+    .status-indicator.active {
+        background: #28a745;
+    }
+    .status-indicator.inactive {
+        background: #dc3545;
+    }
+    .status-indicator.connecting {
+        background: #ffc107;
+        animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    .controls {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="viewer-container">
+    <div class="viewer-header">
+        <h1>Stream Viewer: {{ camera.name }}</h1>
+        <a href="{{ url_for('dashboard.index') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+    
+    <div class="error-message" id="error-message"></div>
+    
+    <div class="stream-display">
+        <canvas id="stream-canvas"></canvas>
+        <img id="stream-image" style="display: none;" alt="Stream from {{ camera.name }}">
+    </div>
+    
+    <div class="stream-info">
+        <h3>Stream Information</h3>
+        <p>
+            <strong>Status:</strong>
+            <span class="status-indicator" id="status-indicator"></span>
+            <span id="status-text">Connecting...</span>
+        </p>
+        <p><strong>Camera Name:</strong> {{ camera.name }}</p>
+        <p><strong>Camera Status:</strong> 
+            <span class="status status-{{ camera.status }}">{{ camera.status }}</span>
+            {% if camera.status != 'active' %}
+            <br><small style="color: #dc3545;">⚠️ Camera must be started before viewing the stream. Use the "Start" button on the dashboard.</small>
+            {% endif %}
+        </p>
+        <p><strong>RTSP URL:</strong> <code>{{ camera.rtsp_url }}</code></p>
+        <p><strong>Videos:</strong> {{ camera.video_ids|length }} video(s)</p>
+        {% if camera.auth_enabled %}
+        <p><strong>Authentication:</strong> Enabled (username: {{ camera.auth_username }})</p>
+        {% endif %}
+        
+        <div class="controls">
+            <button onclick="reconnectStream()" class="btn btn-primary">Reconnect</button>
+            <button onclick="openInVLC()" class="btn btn-secondary">Open in VLC</button>
+            <a href="{{ url_for('dashboard.index') }}" class="btn btn-secondary">Close Viewer</a>
+        </div>
+    </div>
+    
+    <div class="stream-info">
+        <h3>External Viewing</h3>
+        <p>You can also view this stream using external RTSP clients:</p>
+        <ul>
+            <li><strong>VLC Media Player:</strong> Media → Open Network Stream → Enter RTSP URL</li>
+            <li><strong>ffplay:</strong> <code>ffplay {{ camera.rtsp_url }}</code></li>
+            {% if camera.auth_enabled %}
+            <li><strong>With Authentication:</strong> <code>ffplay rtsp://{{ camera.auth_username }}:PASSWORD@{{ camera.rtsp_url.split('@')[-1] if '@' in camera.rtsp_url else camera.rtsp_url.split('//')[1] }}</code></li>
+            {% endif %}
+        </ul>
+    </div>
+</div>
+
+<script>
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 3;
+let reconnectTimer = null;
+let streamReader = null;
+let streamAbortController = null;
+let frameCount = 0;
+let lastFrameTime = Date.now();
+
+const canvas = document.getElementById('stream-canvas');
+const ctx = canvas.getContext('2d');
+const streamUrl = '{{ url_for("viewer.stream_proxy", camera_id=camera.id) }}';
+
+// Set canvas size based on container
+function resizeCanvas() {
+    const container = canvas.parentElement;
+    const containerWidth = container.clientWidth;
+    // Maintain 16:9 aspect ratio or use natural video size
+    const aspectRatio = 16 / 9;
+    const height = containerWidth / aspectRatio;
+    canvas.width = containerWidth;
+    canvas.height = height;
+}
+
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+async function startStream() {
+    // Stop any existing stream
+    stopStream();
+    
+    const statusIndicator = document.getElementById('status-indicator');
+    const statusText = document.getElementById('status-text');
+    const errorDiv = document.getElementById('error-message');
+    
+    statusIndicator.className = 'status-indicator connecting';
+    statusText.textContent = 'Connecting...';
+    errorDiv.classList.remove('show');
+    
+    try {
+        streamAbortController = new AbortController();
+        const response = await fetch(streamUrl, {
+            signal: streamAbortController.signal
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const reader = response.body.getReader();
+        streamReader = reader;
+        
+        let buffer = new Uint8Array(0);
+        const boundaryMarker = new TextEncoder().encode('\r\n--frame\r\n');
+        const headerEndMarker = new Uint8Array([0x0D, 0x0A, 0x0D, 0x0A]); // \r\n\r\n
+        const jpegEndMarker = new Uint8Array([0xFF, 0xD9]);
+        
+        statusIndicator.className = 'status-indicator active';
+        statusText.textContent = 'Streaming';
+        reconnectAttempts = 0;
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) {
+                throw new Error('Stream ended');
+            }
+            
+            // Append new data to buffer
+            const newBuffer = new Uint8Array(buffer.length + value.length);
+            newBuffer.set(buffer);
+            newBuffer.set(value, buffer.length);
+            buffer = newBuffer;
+            
+            // Extract JPEG frames from buffer
+            let processed = false;
+            while (true) {
+                // Look for frame boundary
+                const boundaryPos = findSequence(buffer, boundaryMarker);
+                if (boundaryPos === -1) {
+                    // No boundary found, keep last part of buffer (boundary might be split)
+                    if (buffer.length > boundaryMarker.length * 2) {
+                        buffer = buffer.slice(-boundaryMarker.length * 2);
+                    }
+                    break;
+                }
+                
+                // Found boundary, find header end
+                const afterBoundary = boundaryPos + boundaryMarker.length;
+                const headerEndPos = findSequence(buffer, headerEndMarker, afterBoundary);
+                if (headerEndPos === -1) {
+                    // Headers not complete, wait for more data
+                    buffer = buffer.slice(boundaryPos);
+                    break;
+                }
+                
+                // Found header end, JPEG data starts here
+                const jpegStart = headerEndPos + headerEndMarker.length;
+                
+                // Look for JPEG end marker
+                const jpegEnd = findSequence(buffer, jpegEndMarker, jpegStart);
+                if (jpegEnd === -1) {
+                    // JPEG not complete, wait for more data
+                    buffer = buffer.slice(boundaryPos);
+                    break;
+                }
+                
+                // Found complete JPEG frame
+                const jpegData = buffer.slice(jpegStart, jpegEnd + jpegEndMarker.length);
+                renderFrame(jpegData);
+                
+                // Remove processed data from buffer
+                buffer = buffer.slice(jpegEnd + jpegEndMarker.length);
+                processed = true;
+            }
+        }
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            // Stream was intentionally stopped
+            return;
+        }
+        console.error('Stream error:', error);
+        handleStreamError(error.message);
+    }
+}
+
+function findSequence(buffer, sequence, startPos = 0) {
+    // Find a byte sequence in buffer starting from startPos
+    for (let i = startPos; i <= buffer.length - sequence.length; i++) {
+        let match = true;
+        for (let j = 0; j < sequence.length; j++) {
+            if (buffer[i + j] !== sequence[j]) {
+                match = false;
+                break;
+            }
+        }
+        if (match) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+function renderFrame(jpegData) {
+    const img = document.getElementById('stream-image');
+    const blob = new Blob([jpegData], { type: 'image/jpeg' });
+    const url = URL.createObjectURL(blob);
+    
+    img.onload = function() {
+        // Clear canvas and draw image
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Calculate aspect ratio and center image
+        const imgAspect = img.naturalWidth / img.naturalHeight;
+        const canvasAspect = canvas.width / canvas.height;
+        
+        let drawWidth, drawHeight, drawX, drawY;
+        
+        if (imgAspect > canvasAspect) {
+            // Image is wider - fit to width
+            drawWidth = canvas.width;
+            drawHeight = canvas.width / imgAspect;
+            drawX = 0;
+            drawY = (canvas.height - drawHeight) / 2;
+        } else {
+            // Image is taller - fit to height
+            drawHeight = canvas.height;
+            drawWidth = canvas.height * imgAspect;
+            drawX = (canvas.width - drawWidth) / 2;
+            drawY = 0;
+        }
+        
+        ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+        URL.revokeObjectURL(url);
+        
+        frameCount++;
+        lastFrameTime = Date.now();
+        
+        // Update status
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
+        statusIndicator.className = 'status-indicator active';
+        statusText.textContent = `Streaming (${frameCount} frames)`;
+    };
+    
+    img.onerror = function() {
+        URL.revokeObjectURL(url);
+        console.error('Failed to load frame');
+    };
+    
+    img.src = url;
+}
+
+function stopStream() {
+    if (streamAbortController) {
+        streamAbortController.abort();
+        streamAbortController = null;
+    }
+    if (streamReader) {
+        streamReader.cancel();
+        streamReader = null;
+    }
+}
+
+function handleStreamError(message) {
+    const errorDiv = document.getElementById('error-message');
+    const statusIndicator = document.getElementById('status-indicator');
+    const statusText = document.getElementById('status-text');
+    
+    errorDiv.textContent = message || 'Failed to load stream. The camera may not be active or the stream is unavailable.';
+    errorDiv.classList.add('show');
+    
+    statusIndicator.className = 'status-indicator inactive';
+    statusText.textContent = 'Disconnected';
+    
+    // Auto-reconnect logic
+    if (reconnectAttempts < maxReconnectAttempts) {
+        reconnectAttempts++;
+        statusText.textContent = `Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`;
+        statusIndicator.className = 'status-indicator connecting';
+        
+        reconnectTimer = setTimeout(() => {
+            reconnectStream();
+        }, 3000);
+    } else {
+        statusText.textContent = 'Connection failed';
+    }
+}
+
+function reconnectStream() {
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+    }
+    
+    stopStream();
+    frameCount = 0;
+    startStream();
+}
+
+function openInVLC() {
+    const rtspUrl = '{{ camera.rtsp_url }}';
+    // Create a VLC protocol link (may not work in all browsers)
+    const vlcUrl = `vlc://${rtspUrl}`;
+    window.open(vlcUrl, '_blank');
+    
+    // Fallback: show instructions
+    alert(`To open in VLC:\n1. Open VLC Media Player\n2. Go to Media → Open Network Stream\n3. Enter: ${rtspUrl}`);
+}
+
+// Check stream health periodically
+setInterval(() => {
+    const now = Date.now();
+    const timeSinceLastFrame = now - lastFrameTime;
+    
+    // If no frames received in 10 seconds, consider stream dead
+    if (timeSinceLastFrame > 10000 && frameCount > 0) {
+        console.warn('Stream appears to be stalled');
+        handleStreamError('Stream connection lost. Attempting to reconnect...');
+        reconnectStream();
+    }
+}, 5000);
+
+// Start stream when page loads
+startStream();
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    stopStream();
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+    }
+});
+</script>
+{% endblock %}
+

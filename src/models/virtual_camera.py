@@ -15,6 +15,7 @@ class VirtualCamera:
     auth_enabled: bool = False
     auth_username: Optional[str] = None
     auth_password_hash: Optional[str] = None
+    auth_password_rtsp: Optional[str] = None  # Base64 encoded password for RTSP auth
     status: str = "inactive"  # "active", "inactive", "error"
     current_video_index: int = 0
     created_date: str = ""
@@ -35,6 +36,7 @@ class VirtualCamera:
             'auth_enabled': self.auth_enabled,
             'auth_username': self.auth_username,
             'auth_password_hash': self.auth_password_hash,
+            'auth_password_rtsp': self.auth_password_rtsp,
             'status': self.status,
             'current_video_index': self.current_video_index,
             'created_date': self.created_date,
@@ -60,6 +62,7 @@ class VirtualCamera:
             auth_enabled=data.get('auth_enabled', False),
             auth_username=data.get('auth_username'),
             auth_password_hash=data.get('auth_password_hash'),
+            auth_password_rtsp=data.get('auth_password_rtsp'),
             status=data.get('status', 'inactive'),
             current_video_index=data.get('current_video_index', 0),
             created_date=data.get('created_date', ''),

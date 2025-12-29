@@ -40,6 +40,10 @@ class MultiVideoMediaFactory(GstRtspServer.RTSPMediaFactory):
         self.auth_enabled = auth_enabled
         self.auth_username = auth_username
         self.auth_password_rtsp = auth_password_rtsp
+        
+        # Enable shared media so multiple clients share the same stream
+        # and we can handle looping properly
+        self.set_shared(True)
     
     def set_current_video_index(self, index: int):
         """Update the current video index (for tracking purposes).
@@ -71,27 +75,63 @@ class MultiVideoMediaFactory(GstRtspServer.RTSPMediaFactory):
             f"{len(self.video_paths)}: {video_path}"
         )
 
-        # Build pipeline: filesrc -> decodebin -> videoconvert -> openh264enc
-        # Use decodebin which handles most formats including MOV
-        pipeline_str = (
-            f"filesrc location={escaped_path} ! "
-            "decodebin ! "
-            "videoconvert ! "
-            "video/x-raw,format=I420 ! "
-            "openh264enc complexity=low bitrate=2000000 enable-denoise=false ! "
-            "video/x-h264,profile=baseline ! "
-            "rtph264pay name=pay0 pt=96 config-interval=1"
-        )
+        # Build pipeline - looping is handled via seeking in do_configure
+        if len(self.video_paths) == 1:
+            # Single video - looping handled via seek on EOS
+            source = f"filesrc location={escaped_path}"
+        else:
+            # Multiple videos - use current video with queue buffer
+            source = f"filesrc location={escaped_path} ! queue max-size-buffers=200 max-size-time=2000000000 leaky=downstream"
+        
+        # Check available encoders
+        x264_available = Gst.ElementFactory.find("x264enc") is not None
+        
+        if x264_available:
+            encoder = "x264enc bitrate=2000 speed-preset=ultrafast tune=zerolatency key-int-max=30"
+            logger.info("Using x264enc encoder")
+        else:
+            # Use openh264enc - let it auto-configure without parameters
+            # Specifying parameters causes cmInitParaError
+            encoder = "openh264enc"
+            logger.info("Using openh264enc encoder (x264enc not available) - no parameters to avoid initialization errors")
+        
+        if x264_available:
+            pipeline_str = (
+                f"{source} ! "
+                "decodebin ! "
+                "videoconvert ! "
+                "video/x-raw,format=I420 ! "
+                f"{encoder} ! "
+                "video/x-h264,profile=baseline ! "
+                "rtph264pay name=pay0 pt=96 config-interval=1"
+            )
+        else:
+            # Use openh264enc with forced 640x480 resolution to avoid encoder issues
+            # Use capsfilter element for better compatibility
+            logger.info("Using openh264enc with forced 640x480 resolution")
+            pipeline_str = (
+                f"{source} ! "
+                "decodebin ! "
+                "videoconvert ! "
+                "videoscale ! "
+                "videorate ! "
+                "capsfilter caps=video/x-raw,format=I420,width=640,height=480,framerate=25/1 ! "
+                "openh264enc ! "
+                "h264parse ! "
+                "rtph264pay name=pay0 pt=96 config-interval=1"
+            )
 
         try:
             pipeline = Gst.parse_launch(pipeline_str)
 
+            # Set up error handler to catch encoder errors
+            bus = pipeline.get_bus()
+            bus.add_signal_watch()
+            bus.connect("message::error", self._on_error)
+            
             # Set up EOS handler to switch to next video when current ends
             if len(self.video_paths) > 1:
-                bus = pipeline.get_bus()
-                bus.add_signal_watch()
                 bus.connect("message::eos", self._on_eos)
-                bus.connect("message::error", self._on_error)
 
             logger.info(
                 f"Created pipeline for video {self.current_video_index + 1}/"
@@ -131,6 +171,20 @@ class MultiVideoMediaFactory(GstRtspServer.RTSPMediaFactory):
         """Handle error message."""
         error, debug = message.parse_error()
         logger.error(f"Pipeline error: {error.message}, debug: {debug}")
+        
+        # Log OpenH264 specific errors with more detail
+        if "OpenH264" in str(error.message) or "cmInitParaError" in str(error.message):
+            logger.error(
+                f"OpenH264 encoder error detected. This may indicate an issue with "
+                f"encoder parameters or video format. Debug info: {debug}"
+            )
+            logger.error(
+                "If this error persists, try: "
+                "1. Restart the camera stream to pick up new encoder settings "
+                "2. Check video file format compatibility "
+                "3. Consider installing x264enc for better stability"
+            )
+        
         return True
 
 
@@ -527,7 +581,7 @@ class StreamHandler:
         self.running = True
     
     def _build_single_video_pipeline(self, video_path: str) -> str:
-        """Build GStreamer pipeline for single video.
+        """Build GStreamer pipeline for single video with seamless looping.
 
         Args:
             video_path: Path to video file
@@ -539,16 +593,38 @@ class StreamHandler:
         escaped_path = video_path.replace(' ', '\\ ').replace('&', '\\&').replace('(', '\\(').replace(')', '\\)').replace('[', '\\[').replace(']', '\\]')
 
         # Pipeline must be wrapped in ( ) for GstRtspServer.set_launch()
-        # Using openh264enc as it's more commonly available than x264enc
-        pipeline = (
-            f"( filesrc location={escaped_path} ! "
-            "decodebin ! "
-            "videoconvert ! "
-            "video/x-raw,format=I420 ! "
-            "openh264enc complexity=low bitrate=2000000 ! "
-            "video/x-h264,profile=baseline ! "
-            "rtph264pay name=pay0 pt=96 config-interval=1 )"
-        )
+        # Check available encoders
+        x264_available = Gst.ElementFactory.find("x264enc") is not None
+        
+        if x264_available:
+            encoder = "x264enc bitrate=2000 speed-preset=ultrafast tune=zerolatency key-int-max=30"
+            logger.info("Using x264enc encoder for single video pipeline")
+            pipeline = (
+                f"( filesrc location={escaped_path} ! "
+                "decodebin ! "
+                "videoconvert ! "
+                "video/x-raw,format=I420 ! "
+                f"{encoder} ! "
+                "video/x-h264,profile=baseline ! "
+                "rtph264pay name=pay0 pt=96 config-interval=1 )"
+            )
+        else:
+            # Use decodebin - escape spaces in path with backslash
+            safe_path = video_path.replace(' ', '\\ ')
+            logger.info(f"Using decodebin pipeline for single video: {video_path}")
+            # Use capsfilter element instead of inline caps for better compatibility
+            pipeline = (
+                f"( filesrc location={safe_path} ! "
+                "decodebin ! "
+                "videoconvert ! "
+                "videoscale ! "
+                "videorate ! "
+                "capsfilter caps=video/x-raw,format=I420,width=640,height=480,framerate=25/1 ! "
+                "openh264enc ! "
+                "h264parse ! "
+                "rtph264pay name=pay0 pt=96 config-interval=1 )"
+            )
+        logger.info(f"Pipeline string: {pipeline}")
         return pipeline
     
     def _on_video_end(self):

@@ -110,8 +110,18 @@ async function startCamera(cameraId) {
         const data = await response.json();
         
         if (data.success) {
-            alert(data.message);
-            location.reload();
+            // Switch to cameras tab if not already there
+            if (typeof showTab === 'function') {
+                showTab('cameras');
+            }
+            // Refresh camera list (wait a moment for server to update)
+            setTimeout(async () => {
+                if (typeof refreshCameraList === 'function') {
+                    await refreshCameraList();
+                } else {
+                    location.reload();
+                }
+            }, 500);
         } else {
             alert(`Error: ${data.error}`);
         }
@@ -174,14 +184,102 @@ async function stopCamera(cameraId) {
         const data = await response.json();
         
         if (data.success) {
-            alert(data.message);
-            location.reload();
+            // Switch to cameras tab if not already there
+            if (typeof showTab === 'function') {
+                showTab('cameras');
+            }
+            // Refresh camera list (wait a moment for server to update)
+            setTimeout(async () => {
+                if (typeof refreshCameraList === 'function') {
+                    await refreshCameraList();
+                } else {
+                    location.reload();
+                }
+            }, 500);
         } else {
             alert(`Error: ${data.error}`);
         }
     } catch (error) {
         alert(`Failed to stop camera: ${error.message}`);
         console.error('Stop camera error:', error);
+    }
+}
+
+// Delete video
+async function deleteVideo(videoId, videoName) {
+    if (!confirm(`Are you sure you want to delete "${videoName}"?\n\nThis will permanently delete the video file and cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/delete-video/${videoId}`, {
+            method: 'POST'
+        });
+        
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            alert(`Server error: ${response.status} ${response.statusText}`);
+            console.error('Non-JSON response:', text);
+            return;
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert(`Error: ${data.error}`);
+        }
+    } catch (error) {
+        alert(`Failed to delete video: ${error.message}`);
+        console.error('Delete video error:', error);
+    }
+}
+
+// Delete camera
+async function deleteCamera(cameraId, cameraName) {
+    if (!confirm(`Are you sure you want to delete camera "${cameraName}"?\n\nThis will permanently delete the camera and cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/delete-camera/${cameraId}`, {
+            method: 'POST'
+        });
+        
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            alert(`Server error: ${response.status} ${response.statusText}`);
+            console.error('Non-JSON response:', text);
+            return;
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Switch to cameras tab if not already there
+            if (typeof showTab === 'function') {
+                showTab('cameras');
+            }
+            // Refresh camera list (wait a moment for server to update)
+            setTimeout(async () => {
+                if (typeof refreshCameraList === 'function') {
+                    await refreshCameraList();
+                } else {
+                    location.reload();
+                }
+            }, 500);
+        } else {
+            alert(`Error: ${data.error}`);
+        }
+    } catch (error) {
+        alert(`Failed to delete camera: ${error.message}`);
+        console.error('Delete camera error:', error);
     }
 }
 

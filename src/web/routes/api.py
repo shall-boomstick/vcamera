@@ -104,6 +104,31 @@ def list_videos():
         return jsonify({'error': str(e)}), 500
 
 
+@bp.route('/cameras', methods=['GET'])
+@login_required
+def list_cameras():
+    """List all cameras."""
+    camera_manager = current_app.camera_manager
+    
+    try:
+        cameras = camera_manager.list_cameras()
+        return jsonify({
+            'success': True,
+            'cameras': [{
+                'id': c.id,
+                'name': c.name,
+                'video_ids': c.video_ids,
+                'rtsp_url': c.rtsp_url,
+                'status': c.status,
+                'auth_enabled': c.auth_enabled,
+                'auth_username': c.auth_username
+            } for c in cameras]
+        })
+    except Exception as e:
+        logger.error(f"Failed to list cameras: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
 @bp.route('/create-camera', methods=['POST'])
 @login_required
 def create_camera():

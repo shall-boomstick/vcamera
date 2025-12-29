@@ -171,3 +171,5 @@ class TestRTSPAuthentication:
             if os.path.exists(temp_file.name):
                 os.unlink(temp_file.name)
 
+
+

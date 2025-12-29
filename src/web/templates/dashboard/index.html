@@ -32,6 +32,127 @@
     .tab-content.active {
         display: block;
     }
+    /* Modal styles */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 1000;
+        overflow: auto;
+    }
+    .modal-overlay.show {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .modal-content {
+        background: #fff;
+        border-radius: 8px;
+        padding: 20px;
+        max-width: 90vw;
+        max-height: 90vh;
+        width: 1200px;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #ddd;
+    }
+    .modal-header h2 {
+        margin: 0;
+    }
+    .modal-close {
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+    .modal-close:hover {
+        background: #c82333;
+    }
+    .modal-body {
+        flex: 1;
+        overflow: auto;
+    }
+    .stream-display {
+        position: relative;
+        background: #000;
+        border: 2px solid #ddd;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 15px;
+    }
+    .stream-display canvas {
+        width: 100%;
+        height: auto;
+        display: block;
+        max-height: 70vh;
+    }
+    .stream-info {
+        background: #f5f5f5;
+        padding: 15px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+    }
+    .stream-info h3 {
+        margin-top: 0;
+        font-size: 16px;
+    }
+    .stream-info p {
+        margin: 8px 0;
+        font-size: 14px;
+    }
+    .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 6px;
+    }
+    .status-indicator.active {
+        background: #28a745;
+    }
+    .status-indicator.inactive {
+        background: #dc3545;
+    }
+    .status-indicator.connecting {
+        background: #ffc107;
+        animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    .modal-controls {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+    }
+    .error-message {
+        background: #fee;
+        color: #c33;
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+        display: none;
+        font-size: 14px;
+    }
+    .error-message.show {
+        display: block;
+    }
 </style>
 {% endblock %}
 
@@ -46,12 +167,12 @@
     </div>
     
     <div class="tabs">
-        <button class="tab active" onclick="showTab('videos')">Video Library</button>
-        <button class="tab" onclick="showTab('cameras')">Virtual Cameras</button>
+        <button class="tab active" onclick="showTab('cameras')">Virtual Cameras</button>
+        <button class="tab" onclick="showTab('videos')">Video Library</button>
     </div>
     
     <!-- Video Library Tab -->
-    <div id="videos-tab" class="tab-content active">
+    <div id="videos-tab" class="tab-content">
         <h2>Video Library</h2>
         
         <div class="upload-section">
@@ -76,16 +197,20 @@
                         <th>Size (MB)</th>
                         <th>Format</th>
                         <th>Dimensions</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for video in videos %}
-                    <tr>
+                    <tr data-video-id="{{ video.id }}">
                         <td>{{ video.filename }}</td>
                         <td>{{ "%.1f"|format(video.duration) }}</td>
                         <td>{{ "%.2f"|format(video.file_size / (1024*1024)) }}</td>
                         <td>{{ video.format }}</td>
                         <td>{{ video.width }}x{{ video.height }}</td>
+                        <td>
+                            <button onclick="deleteVideo('{{ video.id }}', '{{ video.filename }}')" class="btn btn-danger btn-sm">Delete</button>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -94,7 +219,7 @@
     </div>
     
     <!-- Cameras Tab -->
-    <div id="cameras-tab" class="tab-content">
+    <div id="cameras-tab" class="tab-content active">
         <h2>Virtual Cameras</h2>
         
         <div class="camera-list">
@@ -116,11 +241,15 @@
                         <td>{{ camera.video_ids|length }}</td>
                         <td><code>{{ camera.rtsp_url }}</code></td>
                         <td>
-                            {% if camera.status == 'active' %}
-                            <button onclick="stopCamera('{{ camera.id }}')" class="btn btn-danger btn-sm">Stop</button>
-                            {% else %}
-                            <button onclick="startCamera('{{ camera.id }}')" class="btn btn-success btn-sm">Start</button>
-                            {% endif %}
+                            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                                {% if camera.status == 'active' %}
+                                <button onclick="stopCamera('{{ camera.id }}')" class="btn btn-danger btn-sm">Stop</button>
+                                <button onclick="openStreamViewer('{{ camera.id }}', '{{ camera.name }}', '{{ camera.rtsp_url }}', {{ camera.status == 'active' }})" class="btn btn-primary btn-sm">View</button>
+                                {% else %}
+                                <button onclick="startCamera('{{ camera.id }}')" class="btn btn-success btn-sm">Start</button>
+                                {% endif %}
+                                <button onclick="deleteCamera('{{ camera.id }}', '{{ camera.name }}')" class="btn btn-danger btn-sm">Delete</button>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -172,17 +301,510 @@
     </div>
 </div>
 
+<!-- Stream Viewer Modal -->
+<div id="stream-modal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modal-camera-name">Stream Viewer</h2>
+            <button class="modal-close" onclick="closeStreamViewer()">Close</button>
+        </div>
+        <div class="modal-body">
+            <div class="error-message" id="modal-error-message"></div>
+            
+            <div class="stream-display">
+                <canvas id="modal-stream-canvas"></canvas>
+            </div>
+            
+            <div class="stream-info">
+                <h3>Stream Information</h3>
+                <p>
+                    <strong>Status:</strong>
+                    <span class="status-indicator" id="modal-status-indicator"></span>
+                    <span id="modal-status-text">Connecting...</span>
+                </p>
+                <p><strong>Camera Name:</strong> <span id="modal-camera-name-text"></span></p>
+                <p><strong>RTSP URL:</strong> <code id="modal-rtsp-url"></code></p>
+                
+                <div class="modal-controls">
+                    <button onclick="reconnectModalStream()" class="btn btn-primary btn-sm">Reconnect</button>
+                    <button onclick="openInVLC()" class="btn btn-secondary btn-sm">Open in VLC</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 function showTab(tabName) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    event.target.classList.add('active');
+    
+    // Find and activate the correct tab button
+    const tabButtons = document.querySelectorAll('.tab');
+    tabButtons.forEach(btn => {
+        if (btn.textContent.trim().toLowerCase().includes(tabName.toLowerCase()) || 
+            (tabName === 'videos' && btn.textContent.includes('Video Library')) ||
+            (tabName === 'cameras' && btn.textContent.includes('Virtual Cameras'))) {
+            btn.classList.add('active');
+        }
+    });
+    
     document.getElementById(tabName + '-tab').classList.add('active');
+    
+    // Handle auto-refresh
+    if (tabName === 'cameras') {
+        startCameraListRefresh();
+    } else {
+        stopCameraListRefresh();
+    }
 }
 
 document.getElementById('auth-enabled').addEventListener('change', function() {
     document.getElementById('auth-fields').style.display = this.checked ? 'block' : 'none';
 });
+
+// Auto-refresh camera list every 5 seconds
+let cameraListRefreshInterval = null;
+
+async function refreshCameraList() {
+    try {
+        // Get updated camera list from server
+        const response = await fetch('/api/cameras');
+        if (!response.ok) {
+            console.error('Failed to refresh camera list');
+            return;
+        }
+        
+        const data = await response.json();
+        if (!data.success || !data.cameras) {
+            console.error('Invalid response from camera list API');
+            return;
+        }
+        
+        // Update the camera table
+        const tbody = document.querySelector('#cameras-tab .camera-list tbody');
+        if (!tbody) return;
+        
+        // Clear existing rows
+        tbody.innerHTML = '';
+        
+        // Add updated camera rows (in correct order)
+        data.cameras.forEach(camera => {
+            const row = document.createElement('tr');
+            row.setAttribute('data-camera-id', camera.id);
+            
+            const statusBadge = `<span class="status status-${camera.status}">${camera.status}</span>`;
+            
+            const actionsHtml = camera.status === 'active' 
+                ? `<div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                     <button onclick="stopCamera('${camera.id}')" class="btn btn-danger btn-sm">Stop</button>
+                     <button onclick="openStreamViewer('${camera.id}', '${escapeHtml(camera.name)}', '${escapeHtml(camera.rtsp_url || '')}', ${camera.status === 'active'})" class="btn btn-primary btn-sm">View</button>
+                     <button onclick="deleteCamera('${camera.id}', '${escapeHtml(camera.name)}')" class="btn btn-danger btn-sm">Delete</button>
+                   </div>`
+                : `<div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                     <button onclick="startCamera('${camera.id}')" class="btn btn-success btn-sm">Start</button>
+                     <button onclick="deleteCamera('${camera.id}', '${escapeHtml(camera.name)}')" class="btn btn-danger btn-sm">Delete</button>
+                   </div>`;
+            
+            row.innerHTML = `
+                <td>${escapeHtml(camera.name)}</td>
+                <td>${statusBadge}</td>
+                <td>${camera.video_ids ? camera.video_ids.length : 0}</td>
+                <td><code>${escapeHtml(camera.rtsp_url || '')}</code></td>
+                <td>${actionsHtml}</td>
+            `;
+            
+            tbody.appendChild(row);
+        });
+    } catch (error) {
+        console.error('Error refreshing camera list:', error);
+    }
+}
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Start auto-refresh when cameras tab is active
+function startCameraListRefresh() {
+    if (cameraListRefreshInterval) {
+        clearInterval(cameraListRefreshInterval);
+    }
+    
+    // Check if cameras tab is active
+    const camerasTab = document.getElementById('cameras-tab');
+    if (camerasTab && camerasTab.classList.contains('active')) {
+        // Refresh immediately, then set interval
+        refreshCameraList();
+        cameraListRefreshInterval = setInterval(refreshCameraList, 5000);
+    }
+}
+
+// Stop auto-refresh
+function stopCameraListRefresh() {
+    if (cameraListRefreshInterval) {
+        clearInterval(cameraListRefreshInterval);
+        cameraListRefreshInterval = null;
+    }
+}
+
+// Start refresh if cameras tab is active on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const camerasTab = document.getElementById('cameras-tab');
+    if (camerasTab && camerasTab.classList.contains('active')) {
+        startCameraListRefresh();
+    }
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    stopCameraListRefresh();
+    closeStreamViewer();
+});
+
+// Stream Viewer Modal Functions
+let modalStreamReader = null;
+let modalStreamAbortController = null;
+let modalStreamUrl = null;
+let modalFrameCount = 0;
+let modalLastFrameTime = Date.now();
+let modalFrameQueue = [];
+let modalRenderingFrame = false;
+let modalCurrentImage = null;
+
+function openStreamViewer(cameraId, cameraName, rtspUrl, isActive) {
+    const modal = document.getElementById('stream-modal');
+    const canvas = document.getElementById('modal-stream-canvas');
+    
+    // Reset frame count
+    modalFrameCount = 0;
+    
+    // Set modal content
+    document.getElementById('modal-camera-name').textContent = `Stream Viewer: ${cameraName}`;
+    document.getElementById('modal-camera-name-text').textContent = cameraName;
+    document.getElementById('modal-rtsp-url').textContent = rtspUrl;
+    
+    // Check if camera is active
+    if (!isActive) {
+        document.getElementById('modal-error-message').textContent = '⚠️ Camera must be started before viewing the stream. Use the "Start" button on the dashboard.';
+        document.getElementById('modal-error-message').classList.add('show');
+        document.getElementById('modal-status-indicator').className = 'status-indicator inactive';
+        document.getElementById('modal-status-text').textContent = 'Camera not active';
+    } else {
+        document.getElementById('modal-error-message').classList.remove('show');
+    }
+    
+    // Show modal first
+    modal.classList.add('show');
+    
+    // Wait for modal to be visible, then set canvas size
+    setTimeout(() => {
+        const container = canvas.parentElement;
+        const containerWidth = container.clientWidth || 800; // Fallback width
+        canvas.width = containerWidth;
+        canvas.height = (containerWidth * 9) / 16; // 16:9 aspect ratio
+        
+        // Ensure canvas is visible
+        canvas.style.display = 'block';
+        canvas.style.width = '100%';
+        canvas.style.height = 'auto';
+        
+        // Fill with black initially
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        console.log('Canvas initialized:', canvas.width, 'x', canvas.height);
+        
+        // Start stream if active
+        if (isActive) {
+            modalStreamUrl = `/api/stream/${cameraId}`;
+            startModalStream();
+        }
+    }, 100);
+    
+    // Close modal when clicking outside
+    const clickHandler = function(e) {
+        if (e.target === modal) {
+            closeStreamViewer();
+            modal.removeEventListener('click', clickHandler);
+        }
+    };
+    modal.addEventListener('click', clickHandler);
+    
+    // Close on Escape key
+    const escapeHandler = function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('show')) {
+            closeStreamViewer();
+            document.removeEventListener('keydown', escapeHandler);
+        }
+    };
+    document.addEventListener('keydown', escapeHandler);
+}
+
+function closeStreamViewer() {
+    const modal = document.getElementById('stream-modal');
+    modal.classList.remove('show');
+    stopModalStream();
+    modalStreamUrl = null;
+    modalFrameCount = 0;
+    modalFrameQueue = [];
+    modalRenderingFrame = false;
+    modalCurrentImage = null;
+}
+
+async function startModalStream() {
+    stopModalStream();
+    
+    const statusIndicator = document.getElementById('modal-status-indicator');
+    const statusText = document.getElementById('modal-status-text');
+    const errorDiv = document.getElementById('modal-error-message');
+    const canvas = document.getElementById('modal-stream-canvas');
+    
+    if (!canvas) {
+        console.error('Canvas not found');
+        return;
+    }
+    
+    // Ensure canvas has valid dimensions
+    if (canvas.width === 0 || canvas.height === 0) {
+        const container = canvas.parentElement;
+        const containerWidth = container.clientWidth || 800;
+        canvas.width = containerWidth;
+        canvas.height = (containerWidth * 9) / 16;
+    }
+    
+    const ctx = canvas.getContext('2d');
+    
+    statusIndicator.className = 'status-indicator connecting';
+    statusText.textContent = 'Connecting...';
+    errorDiv.classList.remove('show');
+    
+    console.log('Starting modal stream:', modalStreamUrl);
+    
+    try {
+        modalStreamAbortController = new AbortController();
+        const response = await fetch(modalStreamUrl, {
+            signal: modalStreamAbortController.signal
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('multipart')) {
+            console.warn('Unexpected content type:', contentType);
+        }
+        
+        const reader = response.body.getReader();
+        modalStreamReader = reader;
+        
+        let buffer = new Uint8Array(0);
+        const boundaryMarker = new TextEncoder().encode('\r\n--frame\r\n');
+        const headerEndMarker = new Uint8Array([0x0D, 0x0A, 0x0D, 0x0A]);
+        const jpegEndMarker = new Uint8Array([0xFF, 0xD9]);
+        
+        statusIndicator.className = 'status-indicator active';
+        statusText.textContent = 'Streaming...';
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+                console.log('Stream ended');
+                break;
+            }
+            
+            // Append new data to buffer
+            const newBuffer = new Uint8Array(buffer.length + value.length);
+            newBuffer.set(buffer);
+            newBuffer.set(value, buffer.length);
+            buffer = newBuffer;
+            
+            // Find frame boundary
+            let boundaryIndex = findBoundary(buffer, boundaryMarker);
+            while (boundaryIndex >= 0) {
+                // Find header end
+                const headerEnd = findHeaderEnd(buffer, boundaryIndex + boundaryMarker.length);
+                if (headerEnd < 0) break;
+                
+                // Find JPEG end
+                const jpegStart = headerEnd + headerEndMarker.length;
+                const jpegEnd = findJPEGEnd(buffer, jpegStart);
+                if (jpegEnd < 0) break;
+                
+                // Extract JPEG data (include the FFD9 end marker)
+                const jpegData = buffer.slice(jpegStart, jpegEnd + 2);
+                
+                if (jpegData.length > 0) {
+                    // Add to queue instead of rendering immediately
+                    modalFrameQueue.push(jpegData);
+                    processModalFrameQueue(ctx, canvas);
+                }
+                
+                // Remove processed data
+                buffer = buffer.slice(jpegEnd + 2);
+                boundaryIndex = findBoundary(buffer, boundaryMarker);
+            }
+        }
+    } catch (error) {
+        if (error.name !== 'AbortError') {
+            console.error('Stream error:', error);
+            errorDiv.textContent = `Stream error: ${error.message}`;
+            errorDiv.classList.add('show');
+            statusIndicator.className = 'status-indicator inactive';
+            statusText.textContent = 'Connection failed';
+        }
+    }
+}
+
+function stopModalStream() {
+    if (modalStreamAbortController) {
+        modalStreamAbortController.abort();
+        modalStreamAbortController = null;
+    }
+    if (modalStreamReader) {
+        modalStreamReader.cancel();
+        modalStreamReader = null;
+    }
+}
+
+function processModalFrameQueue(ctx, canvas) {
+    // If already rendering, wait
+    if (modalRenderingFrame) {
+        return;
+    }
+    
+    // If queue is empty, nothing to do
+    if (modalFrameQueue.length === 0) {
+        return;
+    }
+    
+    // Get the next frame from queue
+    const jpegData = modalFrameQueue.shift();
+    
+    // Clear any backlog to avoid lag (keep at most 2 frames)
+    if (modalFrameQueue.length > 2) {
+        modalFrameQueue = modalFrameQueue.slice(-2);
+    }
+    
+    renderModalFrame(jpegData, ctx, canvas);
+}
+
+function renderModalFrame(jpegData, ctx, canvas) {
+    if (!jpegData || jpegData.length === 0) {
+        return;
+    }
+    
+    // Verify JPEG header
+    if (jpegData[0] !== 0xFF || jpegData[1] !== 0xD8) {
+        console.warn('Invalid JPEG header');
+        modalRenderingFrame = false;
+        processModalFrameQueue(ctx, canvas);
+        return;
+    }
+    
+    // Mark as rendering
+    modalRenderingFrame = true;
+    
+    // Reuse image element if available, otherwise create new one
+    if (!modalCurrentImage) {
+        modalCurrentImage = new Image();
+    }
+    
+    const img = modalCurrentImage;
+    const blob = new Blob([jpegData], { type: 'image/jpeg' });
+    const url = URL.createObjectURL(blob);
+    
+    // Remove old onload handler
+    img.onload = null;
+    img.onerror = null;
+    
+    img.onload = function() {
+        try {
+            // Only draw if canvas is still valid
+            if (canvas.width > 0 && canvas.height > 0) {
+                // Draw image to fill the entire canvas (don't clear first to avoid flashing)
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            }
+            
+            modalFrameCount++;
+            modalLastFrameTime = Date.now();
+            
+            const statusText = document.getElementById('modal-status-text');
+            if (statusText) {
+                statusText.textContent = `Streaming (${modalFrameCount} frames)`;
+            }
+        } catch (e) {
+            console.error('Error rendering frame:', e);
+        } finally {
+            URL.revokeObjectURL(url);
+            modalRenderingFrame = false;
+            // Process next frame in queue
+            processModalFrameQueue(ctx, canvas);
+        }
+    };
+    
+    img.onerror = function(e) {
+        console.error('Failed to load frame image:', e);
+        URL.revokeObjectURL(url);
+        modalRenderingFrame = false;
+        // Process next frame in queue
+        processModalFrameQueue(ctx, canvas);
+    };
+    
+    img.src = url;
+}
+
+function reconnectModalStream() {
+    if (modalStreamUrl) {
+        startModalStream();
+    }
+}
+
+function openInVLC() {
+    const rtspUrl = document.getElementById('modal-rtsp-url').textContent;
+    const vlcUrl = `vlc://${rtspUrl}`;
+    window.open(vlcUrl, '_blank');
+    alert(`To open in VLC:\n1. Open VLC Media Player\n2. Go to Media → Open Network Stream\n3. Enter: ${rtspUrl}`);
+}
+
+// Helper functions for frame parsing (reused from viewer)
+function findBoundary(buffer, marker) {
+    for (let i = 0; i <= buffer.length - marker.length; i++) {
+        let match = true;
+        for (let j = 0; j < marker.length; j++) {
+            if (buffer[i + j] !== marker[j]) {
+                match = false;
+                break;
+            }
+        }
+        if (match) return i;
+    }
+    return -1;
+}
+
+function findHeaderEnd(buffer, start) {
+    for (let i = start; i <= buffer.length - 4; i++) {
+        if (buffer[i] === 0x0D && buffer[i + 1] === 0x0A &&
+            buffer[i + 2] === 0x0D && buffer[i + 3] === 0x0A) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+function findJPEGEnd(buffer, start) {
+    for (let i = start; i <= buffer.length - 2; i++) {
+        if (buffer[i] === 0xFF && buffer[i + 1] === 0xD9) {
+            return i;
+        }
+    }
+    return -1;
+}
 </script>
 {% endblock %}
 

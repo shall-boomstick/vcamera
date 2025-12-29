@@ -1,5 +1,5 @@
 """Dashboard routes."""
-from flask import Blueprint, render_template, current_app
+from flask import Blueprint, render_template, current_app, flash
 from ..routes.auth import login_required
 
 bp = Blueprint('dashboard', __name__)
